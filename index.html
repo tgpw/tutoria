@@ -428,9 +428,10 @@ th{font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.8px;f
       <div class="psub">Cadastre o PDF do gabarito por disciplina e tipo. O sistema carrega automaticamente na hora de corrigir.</div>
       <div class="card" style="margin-bottom:14px">
         <div class="card-title">Novo gabarito</div>
+        <div style="font-size:12px;color:var(--t2);margin-bottom:12px">Cadastre 1 gabarito por disciplina. O PDF deve conter os critérios de CRIAR, ENTENDER e DELINEAR. Na hora de corrigir você informa qual tipo está sendo corrigido.</div>
         <div class="grid2" style="margin-bottom:12px">
           <div class="field" style="margin-bottom:0">
-            <label class="flabel">Nome do gabarito</label>
+            <label class="flabel">Nome da disciplina</label>
             <input id="gab-nome" class="inp" placeholder="Ex: Introdução à EaD"/>
           </div>
           <div class="field" style="margin-bottom:0">
@@ -440,15 +441,6 @@ th{font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.8px;f
           <div class="field" style="margin-bottom:0">
             <label class="flabel">Disciplina</label>
             <select id="gab-disc" class="sel"></select>
-          </div>
-          <div class="field" style="margin-bottom:0">
-            <label class="flabel">Tipo</label>
-            <select id="gab-tipo" class="sel">
-              <option value="">Selecione</option>
-              <option value="CRIAR">CRIAR</option>
-              <option value="ENTENDER">ENTENDER</option>
-              <option value="DELINEAR">DELINEAR</option>
-            </select>
           </div>
         </div>
         <div class="dz" id="dz-gab" style="padding:14px">
@@ -717,10 +709,9 @@ function loadDiscSelect(modId='ctx-modulo',discId='ctx-disciplina'){
 function loadGabAuto(){
   const mod=document.getElementById('ctx-modulo').value;
   const disc=document.getElementById('ctx-disciplina').value;
-  const tipo=document.getElementById('ctx-tipo').value;
   const s=document.getElementById('ctx-gabarito');
   s.innerHTML='<option value="">Selecione</option>';
-  gabs.filter(g=>g.modulo===mod&&g.disciplina===disc&&g.tipo===tipo)
+  gabs.filter(g=>g.modulo===mod&&g.disciplina===disc)
     .forEach(g=>s.innerHTML+=`<option value="${esc(g.id)}">${esc(g.nome)}</option>`);
   if(s.options.length===2)s.selectedIndex=1;
   checkReady();
@@ -772,22 +763,19 @@ async function addGabarito(){
   const nome=document.getElementById('gab-nome').value.trim();
   const modulo=document.getElementById('gab-modulo').value;
   const disciplina=document.getElementById('gab-disc').value;
-  const tipo=document.getElementById('gab-tipo').value;
-  if(!nome||!modulo||!disciplina||!tipo)return toast('Preencha todos os campos','err');
+  if(!nome||!modulo||!disciplina)return toast('Preencha nome, módulo e disciplina','err');
   if(!_gabFile)return toast('Selecione o PDF do gabarito','err');
-  const id=slug(disciplina)+'_'+slug(modulo)+'_'+slug(tipo);
+  const id=slug(disciplina)+'_'+slug(modulo);
   try{
     await stUpload(id+'.pdf',_gabFile);
-    await sbUpsert('tutoria_gabaritos',{id,nome,modulo,disciplina,tipo,arquivo:id+'.pdf',tipo_mime:_gabFile.type||'application/pdf'});
+    await sbUpsert('tutoria_gabaritos',{id,nome,modulo,disciplina,arquivo:id+'.pdf',tipo_mime:_gabFile.type||'application/pdf'});
     document.getElementById('gab-nome').value='';
-    document.getElementById('gab-tipo').value='';
     _gabFile=null;document.getElementById('fi-gab').value='';
     document.getElementById('gab-file-label').textContent='📄 Clique para selecionar o PDF do gabarito';
     await loadAll();toast('Gabarito salvo!');
   }catch(e){
     console.error(e);
-    // fallback sem storage
-    await sbUpsert('tutoria_gabaritos',{id,nome,modulo,disciplina,tipo});
+    await sbUpsert('tutoria_gabaritos',{id,nome,modulo,disciplina});
     await loadAll();toast('Gabarito salvo (sem arquivo)');
   }
 }
@@ -802,7 +790,7 @@ function renderGabaritos(){
     <div class="item">
       <div>
         <div class="item-name">${esc(g.nome)}</div>
-        <div class="item-sub">Módulo ${esc(g.modulo)} · ${esc(g.disciplina)} · <b>${esc(g.tipo)}</b></div>
+        <div class="item-sub">Módulo ${esc(g.modulo)} · ${esc(g.disciplina)} · contém CRIAR, ENTENDER e DELINEAR</div>
       </div>
       <button class="btn-sm red" onclick="delGabarito('${esc(g.id)}')">Excluir</button>
     </div>`);
@@ -1000,19 +988,25 @@ async function iniciarCorrecao(){
 async function corrigir(gabC,gabMeta,atvName,atvC,key,modulo,disciplina,tipo,nomeAluno){
   const content=[];
   addContent(content,
-    `=== GABARITO OFICIAL ===\nDisciplina: ${disciplina} | Módulo: ${modulo} | Tipo: ${tipo}\nNome do gabarito: ${gabMeta.nome}\n\nLeia este documento com atenção e extraia TODOS os critérios de avaliação com suas pontuações máximas. Estes critérios devem ser usados para corrigir a atividade abaixo.`,
+    `=== GABARITO OFICIAL DA DISCIPLINA ===
+Disciplina: ${disciplina} | Módulo: ${modulo}
+Nome: ${gabMeta.nome}
+
+ATENÇÃO: Este gabarito contém critérios para 3 tipos de atividade (CRIAR, ENTENDER/SIGNIFICAR e DELINEAR).
+Você deve localizar e extrair APENAS os critérios referentes ao tipo: "${tipo}"
+Ignore completamente os critérios dos outros tipos de atividade.`,
     gabC);
   addContent(content,`\n=== ATIVIDADE DO ALUNO ===\nArquivo: ${atvName}\nAluno: ${nomeAluno}`,atvC);
   content.push({type:'text',text:`
-=== INSTRUÇÕES ===
-Você é professor universitário corrigindo uma atividade de "${tipo}" da disciplina "${disciplina}" - Módulo ${modulo}.
+=== INSTRUÇÕES DE CORREÇÃO ===
+Você é professor universitário corrigindo uma atividade do tipo "${tipo}" da disciplina "${disciplina}" - Módulo ${modulo}.
 
-IMPORTANTE:
-- Extraia os critérios EXATAMENTE como estão no gabarito (nome, pontuação máxima, descrição)
-- Para cada critério, avalie o que o aluno entregou vs o que era esperado
-- Seja rigoroso mas justo — considere a qualidade argumentativa e uso dos conceitos
-- Se o gabarito tiver gabarito com resposta certa (ex: matemática), verifique a exatidão
-- Se for atividade dissertativa, avalie profundidade, coerência e uso dos conceitos da disciplina
+PASSOS OBRIGATÓRIOS:
+1. No gabarito, localize a seção referente a "${tipo}" (pode estar nomeada como "${tipo}", "ENTENDER, SIGNIFICAR" para ENTENDER, etc.)
+2. Extraia TODOS os critérios dessa seção com suas pontuações máximas e descrições
+3. Leia a atividade do aluno e avalie cada critério
+4. Calcule a nota final somando os pontos obtidos em cada critério
+5. Seja rigoroso mas justo — valorize o esforço argumentativo e o uso dos conceitos da disciplina
 
 Responda APENAS com JSON válido, sem markdown, sem texto extra:
 {
@@ -1023,21 +1017,31 @@ Responda APENAS com JSON válido, sem markdown, sem texto extra:
   "nota_final": "XX/100",
   "nota_numerica": 0,
   "escala_maxima": 100,
-  "memoria_calculo": "Explique passo a passo como chegou na nota final, citando cada critério e a pontuação atribuída",
+  "memoria_calculo": "Explique passo a passo: critério 1 vale X, aluno obteve Y porque... critério 2 vale X, aluno obteve Y porque...",
   "criterios": [
     {
       "label": "nome exato do critério conforme gabarito",
       "peso": "XX pontos",
-      "esperado": "o que o gabarito previa em linguagem clara e resumida",
-      "entregue": "o que o aluno efetivamente fez, em linguagem clara",
+      "esperado": "o que o gabarito previa para este critério em linguagem clara",
+      "entregue": "o que o aluno efetivamente entregou para este critério",
       "desconto": "",
       "motivo": ""
     }
   ],
+  "incompativel": false,
+  "motivo_incompatibilidade": "",
   "pontos_positivos": ["ponto forte 1", "ponto forte 2"],
   "pontos_negativos": ["ponto de melhoria 1", "ponto de melhoria 2"],
-  "feedback": "Feedback detalhado, construtivo e personalizado para o aluno em 3 a 6 frases"
-}`});
+  "feedback": "Feedback detalhado, construtivo e personalizado para o aluno em 3 a 6 frases. Comece pelo nome do aluno."
+}
+
+ATENÇÃO ESPECIAL: Se após ler a atividade você concluir que ela NÃO corresponde ao tipo "${tipo}" (ex: é uma atividade CRIAR sendo enviada como ENTENDER, ou é um documento completamente diferente), preencha:
+- "incompativel": true
+- "motivo_incompatibilidade": explique brevemente o motivo
+- "nota_numerica": 0
+- "nota_final": "Pendente"
+- "feedback": explique ao professor o que foi identificado
+Nesse caso NÃO atribua nota nem avalie critérios.`});
 
   const res=await fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
@@ -1050,7 +1054,7 @@ Responda APENAS com JSON válido, sem markdown, sem texto extra:
     body:JSON.stringify({
       model:'claude-sonnet-4-5',
       max_tokens:3000,
-      system:'Você é professor universitário experiente. Corrija com rigor acadêmico. Responda APENAS JSON válido sem markdown.',
+      system:'Você é professor universitário experiente em EaD. Corrija com rigor acadêmico, extraindo os critérios exatamente do gabarito fornecido. Responda APENAS JSON válido sem markdown.',
       messages:[{role:'user',content}]
     })
   });
@@ -1118,6 +1122,15 @@ function renderAlunosList(){
   const rows=resFiltered();
   document.getElementById('res-count').textContent=rows.length+' resultado(s)';
   document.getElementById('alunos-list').innerHTML=rows.map((r,i)=>{
+    if(r.incompativel){
+      return `<div class="aluno-li${_selIdx===i?' sel':''}" onclick="selAluno(${i})">
+        <div style="min-width:0">
+          <div class="aluno-li-name">${esc(r.nome_aluno||'Aluno')}</div>
+          <div class="aluno-li-sub" style="color:var(--ylw)">⚠ Revisar</div>
+        </div>
+        <span class="badge warn" style="flex-shrink:0">!</span>
+      </div>`;
+    }
     const nc=notaCor(r.nota_numerica,r.escala_maxima);
     return `<div class="aluno-li${_selIdx===i?' sel':''}" onclick="selAluno(${i})">
       <div style="min-width:0">
@@ -1135,6 +1148,21 @@ function selAluno(i){
   if(r)renderDetalhe(r,i);
 }
 function renderDetalhe(r,idx){
+  // Atividade incompatível
+  if(r.incompativel){
+    document.getElementById('det-panel').innerHTML=`
+      <div style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.25);border-radius:14px;padding:24px;margin-bottom:20px">
+        <div style="font-size:16px;font-weight:700;color:var(--ylw);margin-bottom:8px">⚠ Atividade para revisão manual</div>
+        <div style="font-size:13px;color:var(--t2);margin-bottom:16px">${esc(r.motivo_incompatibilidade||'A IA identificou que esta atividade pode não corresponder ao tipo selecionado.')}</div>
+        <div style="font-size:12px;color:var(--t3)">Arquivo: ${esc(r._arquivo||'—')}</div>
+      </div>
+      <div style="font-size:13px;color:var(--t2);margin-bottom:16px">${esc(r.feedback||'')}</div>
+      <div class="btn-row">
+        <button class="btn-sm acc" onclick="abrirModalNome(${idx})">✎ Editar nome</button>
+      </div>`;
+    return;
+  }
+
   const nc=notaCor(r.nota_numerica,r.escala_maxima);
   const crits=r.criterios||[];
   const critRows=crits.length
