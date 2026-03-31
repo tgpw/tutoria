@@ -127,7 +127,7 @@ header{height:52px;display:flex;align-items:center;justify-content:space-between
 .res-layout{display:flex;height:calc(100vh - 52px);overflow:hidden}
 .sess-sidebar{width:210px;min-width:210px;background:var(--s1);border-right:1px solid var(--b1);overflow-y:auto;flex-shrink:0}
 .sess-sec{padding:10px 12px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--t3)}
-.sess-item{padding:9px 12px;cursor:pointer;transition:background .15s;border-left:2px solid transparent}
+.sess-item{padding:9px 12px;cursor:pointer;transition:background .15s;border-left:2px solid transparent;display:flex;align-items:center;gap:6px}
 .sess-item:hover{background:var(--s2)}
 .sess-item.active{border-left-color:var(--acc);background:rgba(59,130,246,.05)}
 .sess-item-mod{font-size:10px;font-family:var(--mono);color:var(--acc)}
@@ -215,7 +215,7 @@ th{font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.8px;f
     <div class="hbrand">
       <div class="hbrand-dot"></div>
       <div class="hbrand-name">TutorIA</div>
-      <div class="hbrand-ver">v1.1</div>
+      <div class="hbrand-ver">v1.2</div>
     </div>
     <div class="hnav">
       <button class="ntab active" data-tab="nova" onclick="goTab('nova',this)">Nova Correção</button>
@@ -849,10 +849,10 @@ function renderCost(){
   if(!qtd){box.style.display='none';return;}
   box.style.display='block';
   // Com critérios fixos é mais barato (sem PDF do gabarito)
-  const usd=((qtd*1800/1e6)*3)+((qtd*1500/1e6)*15);
+  const usd=((qtd*1200/1e6)*3)+((qtd*1000/1e6)*15);
   document.getElementById('est-usd').textContent='$'+usd.toFixed(3);
   document.getElementById('est-brl').textContent='R$ '+(usd*5.80).toFixed(2);
-  document.getElementById('est-detail').textContent=`Estimativa para ${qtd} atividade(s) · critérios fixos = menor custo`;
+  document.getElementById('est-detail').textContent=`Estimativa para ${qtd} atividade(s) · critérios fixos + prompt reduzido`;
 }
 
 // ═══════════════════════════════
@@ -865,16 +865,16 @@ async function extrair(file){
     try{
       if(!window.pdfjsLib){await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}
       const ab=await file.arrayBuffer();const pdf=await window.pdfjsLib.getDocument({data:ab}).promise;
-      let txt='';for(let i=1;i<=Math.min(pdf.numPages,8);i++){const page=await pdf.getPage(i);const tc=await page.getTextContent();txt+=`\n[Página ${i}]\n`+tc.items.map(it=>it.str).join(' ');}
-      txt=txt.trim();if(txt.length>80)return{tipo:'text',texto:txt.substring(0,14000)};
-      const pages=[];for(let i=1;i<=Math.min(pdf.numPages,4);i++){const page=await pdf.getPage(i);const vp=page.getViewport({scale:1.5});const canvas=document.createElement('canvas');canvas.width=vp.width;canvas.height=vp.height;await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;pages.push(canvas.toDataURL('image/jpeg',0.82).split(',')[1]);}
+      let txt='';for(let i=1;i<=Math.min(pdf.numPages,4);i++){const page=await pdf.getPage(i);const tc=await page.getTextContent();txt+=`\n[Pág.${i}]\n`+tc.items.map(it=>it.str).join(' ');}
+      txt=txt.trim();if(txt.length>80)return{tipo:'text',texto:txt.substring(0,8000)};
+      const pages=[];for(let i=1;i<=Math.min(pdf.numPages,3);i++){const page=await pdf.getPage(i);const vp=page.getViewport({scale:1.3});const canvas=document.createElement('canvas');canvas.width=vp.width;canvas.height=vp.height;await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;pages.push(canvas.toDataURL('image/jpeg',0.75).split(',')[1]);}
       return{tipo:'images',pages,mime:'image/jpeg'};
     }catch(e){return{tipo:'text',texto:'[Erro PDF: '+e.message+']'};}
   }
   if(/\.(docx|doc)$/i.test(nome)){
     try{
       if(!window.mammoth){await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});}
-      const ab=await file.arrayBuffer();const result=await window.mammoth.extractRawText({arrayBuffer:ab});return{tipo:'text',texto:result.value.substring(0,14000)};
+      const ab=await file.arrayBuffer();const result=await window.mammoth.extractRawText({arrayBuffer:ab});return{tipo:'text',texto:result.value.substring(0,8000)};
     }catch(e){return{tipo:'text',texto:'[Erro DOCX: '+e.message+']'};}
   }
   return{tipo:'text',texto:'[Formato não suportado]'};
@@ -965,43 +965,16 @@ ATENÇÃO: Use EXATAMENTE estes critérios. Não invente outros. Não omita nenh
 
   addContent(content,`\n=== ATIVIDADE DO ALUNO ===\nArquivo: ${atvName}\nAluno: ${nomeAluno}`,atvC);
 
-  content.push({type:'text',text:`
-=== INSTRUÇÕES ===
-Você é professor universitário corrigindo atividade "${tipo}" de "${disciplina}" - Módulo ${modulo}.
-Aluno: ${nomeAluno}
-
-1. Leia a atividade do aluno
-2. Para cada critério listado, avalie o que o aluno entregou
-3. Atribua pontuação de 0 até o máximo de cada critério
-4. Some as pontuações para a nota final
-5. Verifique se a atividade é compatível com o tipo "${tipo}"
-
-Responda APENAS JSON válido sem markdown:
-{
-  "nome_aluno": "${nomeAluno}",
-  "disciplina": "${disciplina}",
-  "modulo": "${modulo}",
-  "tipo_atividade": "${tipo}",
-  "incompativel": false,
-  "motivo_incompatibilidade": "",
-  "nota_final": "XX/${critFixos?critFixos.escala_maxima||100:100}",
-  "nota_numerica": 0,
-  "escala_maxima": ${critFixos?critFixos.escala_maxima||100:100},
-  "memoria_calculo": "Critério 1: X/${critFixos?.criterios?.[0]?.pontos||'?'} pts porque... Critério 2: Y/? pts porque... Total: Z pts",
-  "criterios": [
-    {"label": "nome exato do critério", "peso": "XX pontos", "pontos_obtidos": 0, "esperado": "o que era esperado", "entregue": "o que o aluno fez", "desconto": "", "motivo": ""}
-  ],
-  "pontos_positivos": ["ponto forte 1", "ponto forte 2"],
-  "pontos_negativos": ["melhoria 1", "melhoria 2"],
-  "feedback": "Feedback detalhado e personalizado para o aluno em 3 a 5 frases. Comece pelo nome do aluno."
-}
-
-Se incompativel=true: nota_numerica=0, nota_final="Pendente", não avalie critérios.`});
+  content.push({type:'text',text:`INSTRUÇÕES: Corrija a atividade "${tipo}" de "${disciplina}" (Módulo ${modulo}) do aluno ${nomeAluno}.
+Para cada critério: avalie o que foi entregue vs esperado e atribua pontuação de 0 até o máximo.
+Se a atividade não corresponder ao tipo "${tipo}", marque incompativel=true.
+Responda APENAS JSON sem markdown:
+{"nome_aluno":"${nomeAluno}","disciplina":"${disciplina}","modulo":"${modulo}","tipo_atividade":"${tipo}","incompativel":false,"motivo_incompatibilidade":"","nota_final":"XX/${critFixos?critFixos.escala_maxima||100:100}","nota_numerica":0,"escala_maxima":${critFixos?critFixos.escala_maxima||100:100},"memoria_calculo":"Critério X: N pts porque...","criterios":[{"label":"nome","peso":"X pts","pontos_obtidos":0,"esperado":"resumo","entregue":"resumo","desconto":"","motivo":""}],"pontos_positivos":[""],"pontos_negativos":[""],"feedback":"Feedback direto ao aluno em 3 frases."}`});
 
   const res=await fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:3000,system:'Você é professor universitário experiente em EaD. Corrija com rigor acadêmico usando EXATAMENTE os critérios fornecidos. Responda APENAS JSON válido sem markdown.',messages:[{role:'user',content}]})
+    body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:2000,system:'Professor universitário em EaD. Corrija usando EXATAMENTE os critérios fornecidos. Responda APENAS JSON válido.',messages:[{role:'user',content}]})
   });
   if(!res.ok){const e=await res.json();throw new Error(e.error?.message||'HTTP '+res.status);}
   const data=await res.json();
@@ -1023,7 +996,22 @@ function renderSessoes(){
   const el=document.getElementById('sess-list');
   if(!sessions.length){el.innerHTML='<div style="padding:20px 12px;font-size:12px;color:var(--t3)">Nenhuma sessão.</div>';return;}
   const sorted=[...sessions].sort((a,b)=>b.id-a.id);
-  el.innerHTML=sorted.map(s=>`<div class="sess-item${_curSess?.id===s.id?' active':''}" onclick="selecionarSessaoById(${s.id})"><div class="sess-item-mod">Mod. ${esc(s.modulo)}</div><div class="sess-item-disc">${esc(s.disciplina||'—')}</div><div class="sess-item-sub">${esc(s.tipo||'')} · ${esc(s.data||'')} · ${s.total} atv</div></div>`).join('');
+  el.innerHTML=sorted.map(s=>`
+    <div class="sess-item${_curSess?.id===s.id?' active':''}">
+      <div onclick="selecionarSessaoById(${s.id})" style="flex:1;cursor:pointer">
+        <div class="sess-item-mod">Mod. ${esc(s.modulo)}</div>
+        <div class="sess-item-disc">${esc(s.disciplina||'—')}</div>
+        <div class="sess-item-sub">${esc(s.tipo||'')} · ${esc(s.data||'')} · ${s.total} atv</div>
+      </div>
+      <span onclick="excluirSessao(${s.id})" title="Excluir sessão" style="cursor:pointer;color:var(--t3);font-size:13px;padding:2px 4px;flex-shrink:0;transition:color .15s" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--t3)'">✕</span>
+    </div>`).join('');
+}
+async function excluirSessao(id){
+  if(!confirm('Excluir esta sessão e todas as correções dela?'))return;
+  await sbDelete('tutoria_sessoes',id);
+  sessions=sessions.filter(s=>s.id!==id);
+  if(_curSess?.id===id){_curSess=null;_selIdx=null;document.getElementById('det-panel').innerHTML='<div class="empty" style="margin-top:80px"><div style="font-size:40px;margin-bottom:14px">📋</div><div style="font-size:15px;font-weight:600;margin-bottom:6px">Selecione uma correção</div></div>';document.getElementById('alunos-list').innerHTML='';}
+  renderSessoes();renderHistorico();renderDashboard();toast('Sessão excluída!');
 }
 function selecionarSessaoById(id){const s=sessions.find(x=>x.id===id);if(s)selecionarSessao(s);}
 function selecionarSessao(s){
@@ -1062,7 +1050,7 @@ function renderDetalhe(r,idx){
   const neg=(r.pontos_negativos||[]).map(x=>`<span class="pill pill-y">${esc(x)}</span>`).join('')||'<span style="color:var(--t3);font-size:12px">—</span>';
   const custo=(()=>{if(!r._tokIn&&!r._tokOut)return'';const usd=((r._tokIn||0)/1e6*3)+((r._tokOut||0)/1e6*15);return`<span style="font-size:11px;color:var(--t3);font-family:var(--mono)">Custo: $${usd.toFixed(4)} · R$${(usd*5.80).toFixed(3)}</span>`;})();
   document.getElementById('det-panel').innerHTML=`
-    <div class="det-hdr"><div><div class="det-name" onclick="abrirModalNome(${idx})" title="Clique para editar">${esc(r.nome_aluno||'Aluno')}</div><div class="det-sub">${esc(r.disciplina||'')} · Módulo ${esc(r.modulo||'')} · ${esc(r.tipo_atividade||'')} · ${esc(r._arquivo||'')}</div></div><div class="${nc} nota-pill">${esc(r.nota_final||String(r.nota_numerica))}</div></div>
+    <div class="det-hdr"><div><div class="det-name" onclick="abrirModalNome(${idx})" title="Clique para editar">${esc(r.nome_aluno||'Aluno')}</div><div class="det-sub">${esc(r.disciplina||'')} · Módulo ${esc(r.modulo||'')} · ${esc(r.tipo_atividade||'')} · <span style="color:var(--acc);cursor:pointer" onclick="abrirArquivo('${esc(r._arquivo||'')}','${esc(r._arquivoUrl||'')}')">📄 ${esc(r._arquivo||'—')}</span></div></div><div class="${nc} nota-pill">${esc(r.nota_final||String(r.nota_numerica))}</div></div>
     ${custo?`<div style="margin-bottom:12px">${custo}</div>`:''}
     <div class="sec-block"><div class="sec-label sec-calc">Memória de cálculo</div><div class="mem-calc">${esc(r.memoria_calculo||'—')}</div></div>
     <div class="sec-block"><div class="sec-label sec-crit">Critérios de avaliação</div><div style="overflow-x:auto"><table class="crit-tbl"><thead><tr><th>Critério</th><th>Peso</th><th>Esperado</th><th>Entregue</th><th>Resultado</th></tr></thead><tbody>${critRows}</tbody></table></div></div>
@@ -1071,7 +1059,7 @@ function renderDetalhe(r,idx){
       <div><div class="sec-label sec-neg">A melhorar</div><div class="pills">${neg}</div></div>
     </div>
     <div class="sec-block"><div class="sec-label sec-feed">Feedback para o aluno</div><div class="cbbox">${esc(r.feedback||'—')}</div></div>
-    <div class="btn-row"><button class="btn-sm grn" onclick="exportAluno(${idx})">↓ Excel</button><button class="btn-sm acc" onclick="abrirModalNome(${idx})">✎ Editar nome</button></div>`;
+    <div class="btn-row"><button class="btn-sm grn" onclick="exportAluno(${idx})">↓ Excel</button><button class="btn-sm acc" onclick="abrirModalNome(${idx})">✎ Editar nome</button><button class="btn-sm red" onclick="excluirAtividade(${idx})">✕ Excluir atividade</button></div>`;
 }
 
 // ═══════════════════════════════
@@ -1095,8 +1083,27 @@ async function confirmarNome(){
 }
 
 // ═══════════════════════════════
-// HISTÓRICO
+// EXCLUIR ATIVIDADE INDIVIDUAL
 // ═══════════════════════════════
+async function excluirAtividade(idx){
+  const r=resFiltered()[idx];
+  if(!r||!_curSess)return;
+  if(!confirm(`Excluir atividade de "${r.nome_aluno||'Aluno'}"?`))return;
+  const correcoes=_curSess.correcoes||[];
+  const i=correcoes.findIndex(c=>c._arquivo===r._arquivo&&c.nome_aluno===r.nome_aluno);
+  if(i>=0)correcoes.splice(i,1);
+  _curSess.total=correcoes.length;
+  await sbUpsert('tutoria_sessoes',{id:_curSess.id,modulo:_curSess.modulo,disciplina:_curSess.disciplina,tipo:_curSess.tipo,data:_curSess.data,hora:_curSess.hora,total:_curSess.total,correcoes:_curSess.correcoes});
+  const si=sessions.findIndex(s=>s.id===_curSess.id);if(si>=0)sessions[si]=_curSess;
+  _selIdx=null;
+  document.getElementById('det-panel').innerHTML='<div class="empty" style="margin-top:80px"><div style="font-size:15px;font-weight:600;margin-bottom:6px">Atividade excluída</div><div>Selecione outra correção</div></div>';
+  renderAlunosList();renderHistorico();renderDashboard();
+  toast('Atividade excluída!');
+}
+function abrirArquivo(nome,url){
+  if(url){window.open(url,'_blank');return;}
+  toast('Arquivo não disponível para visualização — foi enviado localmente durante a correção.');
+}
 function todasCorrecoes(){return sessions.flatMap(s=>(s.correcoes||[]).map(c=>({...c,_sessId:s.id,_sessData:s.data,_sessMod:s.modulo||c.modulo,_sessDisc:s.disciplina||c.disciplina,_sessTipo:s.tipo||c.tipo_atividade})));}
 function renderHistorico(){
   const busca=(document.getElementById('hist-busca')?.value||'').toLowerCase();
